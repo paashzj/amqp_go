@@ -18,6 +18,7 @@
 package network
 
 import (
+	"amqp_go/pkg/codec"
 	"amqp_go/pkg/service"
 	"fmt"
 	"github.com/panjf2000/gnet"
@@ -35,7 +36,7 @@ func Run(config *Config, impl service.AmqpServer) (*Server, error) {
 		amqpImpl:    impl,
 	}
 	go func() {
-		err := gnet.Serve(server, fmt.Sprintf("tcp://%s:%d", config.ListenHost, config.ListenPort), gnet.WithMulticore(config.MultiCore))
+		err := gnet.Serve(server, fmt.Sprintf("tcp://%s:%d", config.ListenHost, config.ListenPort), gnet.WithMulticore(config.MultiCore), gnet.WithCodec(&amqpCodec{}))
 		logrus.Error("amqp broker started error ", err)
 	}()
 	return server, nil
@@ -54,6 +55,14 @@ func (s *Server) OnInitComplete(server gnet.Server) (action gnet.Action) {
 }
 
 func (s *Server) React(frame []byte, c gnet.Conn) ([]byte, gnet.Action) {
+	if codec.IsProtocolHeader(frame) {
+		protocolHeader, err := codec.DecodeProtocolHeader(frame)
+		if err != nil {
+			return nil, gnet.Close
+		} else {
+			return protocolHeader.Bytes(), gnet.None
+		}
+	}
 	return nil, gnet.Close
 }
 
